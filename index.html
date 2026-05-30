@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日文單字庫 APP</title>
+    <style>
+        :root {
+            --primary: #FFA500;
+            --success: #4CAF50;
+            --danger: #F44336;
+            --bg: #F5F7FA;
+            --text: #333;
+            --card-bg: #FFF;
+        }
+        body {
+            font-family: "Helvetica Neue", Arial, "LiHei Pro", sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+        #app {
+            width: 100%;
+            max-width: 600px;
+            min-height: 100vh;
+            background-color: var(--card-bg);
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        h1, h2, h3 { text-align: center; }
+        .hidden { display: none !important; }
+        
+        /* Menu Styles */
+        .unit-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .unit-label {
+            background-color: var(--bg);
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+            border-radius: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .unit-label input { display: none; }
+        .unit-label.selected {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .mode-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            padding: 12px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: var(--primary);
+            color: white;
+            transition: 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* Settings Bar */
+        .settings-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        /* Flashcard Styles */
+        .flashcard {
+            width: 100%;
+            height: 250px;
+            perspective: 1000px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        .flashcard-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+        .flashcard.flipped .flashcard-inner {
+            transform: rotateY(180deg);
+        }
+        .flashcard-front, .flashcard-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            border-radius: 10px;
+            background-color: white;
+            border: 2px solid var(--primary);
+        }
+        .flashcard-back {
+            transform: rotateY(180deg);
+            background-color: var(--bg);
+        }
+
+        /* Quiz Styles */
+        .question-box {
+            font-size: 24px;
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: var(--bg);
+            border-radius: 10px;
+        }
+        .options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .option-btn {
+            background-color: white;
+            color: var(--text);
+            border: 2px solid #ddd;
+            text-align: left;
+            padding: 15px;
+        }
+        .option-btn.correct {
+            background-color: var(--success);
+            color: white;
+            border-color: var(--success);
+        }
+        .option-btn.wrong {
+            background-color: var(--danger);
+            color: white;
+            border-color: var(--danger);
+        }
+        .next-btn {
+            width: 100%;
+            margin-top: 20px;
+            background-color: var(--success);
+        }
+
+        /* Results Styles */
+        .result-list {
+            list-style: none;
+            padding: 0;
+        }
+        .result-list li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="view-menu">
+        <h1>日文單字庫 APP</h1>
+        <h3>選擇單元 (可複選)</h3>
+        <div id="unit-container" class="unit-grid"></div>
+        
+        <h3>選擇模式</h3>
+        <div class="mode-buttons">
+            <button onclick="startMode('flashcard')">單字卡模式</button>
+            <button onclick="startMode('zh-jp')">中翻日測驗</button>
+            <button onclick="startMode('jp-zh')">日翻中測驗</button>
+        </div>
+    </div>
+
+    <div id="view-active" class="hidden">
+        <div class="settings-bar">
+            <button onclick="returnToMenu()" style="background-color: #777;">返回首頁</button>
+            <div>
+                <label>顯示：</label>
+                <select id="display-type" onchange="updateDisplay()">
+                    <option value="kanji">漢字 (優先)</option>
+                    <option value="kana">假名</option>
+                </select>
+            </div>
+            <div id="progress-text"></div>
+        </div>
+
+        <div id="area-flashcard" class="hidden">
+            <div class="flashcard" onclick="this.classList.toggle('flipped')">
+                <div class="flashcard-inner">
+                    <div class="flashcard-front" id="fc-front"></div>
+                    <div class="flashcard-back" id="fc-back"></div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 1;" onclick="prevCard()">上一張</button>
+                <button style="flex: 1;" onclick="nextCard()">下一張</button>
+            </div>
+        </div>
+
+        <div id="area-quiz" class="hidden">
+            <div id="quiz-question" class="question-box"></div>
+            <div id="quiz-options" class="options-grid"></div>
+            <button id="btn-next-quiz" class="next-btn hidden" onclick="nextQuiz()">下一題</button>
+        </div>
+    </div>
+
+    <div id="view-results" class="hidden">
+        <h2>測驗結束</h2>
+        <h3 id="result-score"></h3>
+        <div id="wrong-answers-container">
+            <h3>需要複習的單字：</h3>
+            <ul id="wrong-list" class="result-list"></ul>
+        </div>
+        <button style="width: 100%; margin-top: 20px;" onclick="returnToMenu()">返回首頁</button>
+    </div>
+</div>
+
+<script>
+    // 單字資料庫
+    const vocabData = [
+        { unit: 1, kana: "あかい", kanji: "赤い", chinese: "紅色的" },
+        { unit: 1, kana: "あがります", kanji: "上がります", chinese: "上去、上來" },
+        { unit: 1, kana: "あかるい", kanji: "明るい", chinese: "明亮的" },
+        { unit: 1, kana: "あけます", kanji: "開けます", chinese: "打開" },
+        { unit: 1, kana: "あげます", kanji: "あげます", chinese: "給" },
+        { unit: 1, kana: "あげます", kanji: "上げます", chinese: "舉起" },
+        { unit: 1, kana: "あさ", kanji: "朝", chinese: "早上" },
+        { unit: 1, kana: "あさい", kanji: "浅い", chinese: "淺的" },
+        { unit: 1, kana: "あさごはん", kanji: "朝ご飯", chinese: "早飯" },
+        { unit: 1, kana: "あさって", kanji: "明後日", chinese: "後天" },
+        { unit: 1, kana: "あし", kanji: "足", chinese: "腳" },
+        { unit: 1, kana: "あした", kanji: "明日", chinese: "明天" },
+        { unit: 1, kana: "あそこ", kanji: "あそこ", chinese: "那裡" },
+        { unit: 1, kana: "あそびます", kanji: "遊びます", chinese: "玩" },
+        { unit: 1, kana: "あたたかい", kanji: "暖かい", chinese: "溫暖的" },
+        { unit: 1, kana: "あたま", kanji: "頭", chinese: "頭" },
+        { unit: 1, kana: "あたらしい", kanji: "新しい", chinese: "新的" },
+        { unit: 1, kana: "あちら", kanji: "あちら", chinese: "那個、那裡、那位" },
+        { unit: 1, kana: "あつい", kanji: "暑い", chinese: "熱的、炎熱的" },
+        { unit: 1, kana: "あつい", kanji: "熱い", chinese: "熱的、燙的" },
+        { unit: 1, kana: "あつい", kanji: "厚い", chinese: "厚的" },
+        { unit: 1, kana: "あなた", kanji: "貴方", chinese: "你、您" },
+        { unit: 1, kana: "あなたたち", kanji: "貴方たちは", chinese: "你們" },
+        { unit: 1, kana: "あに", kanji: "兄", chinese: "哥哥(謙稱)" },
+        { unit: 1, kana: "あね", kanji: "姉", chinese: "姊姊(謙稱)" },
+        { unit: 1, kana: "あの", kanji: "あの", chinese: "那個+名詞" },
+        { unit: 1, kana: "アパート", kanji: "Apartment", chinese: "公寓" },
+        { unit: 1, kana: "あびます", kanji: "浴びます", chinese: "淋" },
+        { unit: 1, kana: "あぶない", kanji: "危ない", chinese: "危險的" },
+        { unit: 1, kana: "あまい", kanji: "甘い", chinese: "甜的" },
+        { unit: 2, kana: "あまり", kanji: "余り", chinese: "不怎麼~" },
+        { unit: 2, kana: "あみます", kanji: "編みます", chinese: "編織" },
+        { unit: 2, kana: "あめ", kanji: "飴", chinese: "糖果" },
+        { unit: 2, kana: "あめ", kanji: "雨", chinese: "雨、下雨天" },
+        { unit: 2, kana: "アメリカ", kanji: "America", chinese: "美國" },
+        { unit: 2, kana: "あらいます", kanji: "洗います", chinese: "洗" },
+        { unit: 2, kana: "あります", kanji: "あります", chinese: "有、在" },
+        { unit: 2, kana: "アルバイト", kanji: "Arbeit", chinese: "打工、工讀生" },
+        { unit: 2, kana: "あれ", kanji: "あれ", chinese: "那個" },
+        { unit: 2, kana: "い", kanji: "胃", chinese: "胃" },
+        { unit: 2, kana: "いい/よい", kanji: "良い", chinese: "好的" },
+        { unit: 2, kana: "いえ", kanji: "家", chinese: "家、房子" },
+        { unit: 2, kana: "いきます", kanji: "行きます", chinese: "去" },
+        { unit: 2, kana: "いくつ", kanji: "いくつ", chinese: "幾個、幾歲" },
+        { unit: 2, kana: "いくら", kanji: "いくら", chinese: "多少錢" },
+        { unit: 2, kana: "いけ", kanji: "池", chinese: "池塘" },
+        { unit: 2, kana: "いしゃ", kanji: "医者", chinese: "醫生" },
+        { unit: 2, kana: "いす", kanji: "椅子", chinese: "椅子" },
+        { unit: 2, kana: "いぜん", kanji: "以前", chinese: "之前、以前" },
+        { unit: 2, kana: "いそがしい", kanji: "忙しい", chinese: "忙碌的" },
+        { unit: 2, kana: "いたい", kanji: "痛い", chinese: "痛的" },
+        { unit: 2, kana: "いちばん", kanji: "一番", chinese: "最~" },
+        { unit: 2, kana: "いっしょうけんめい", kanji: "一生懸命", chinese: "拼命" },
+        { unit: 2, kana: "いっしょに", kanji: "一緒に", chinese: "一起" },
+        { unit: 2, kana: "いっぱい", kanji: "一杯", chinese: "很多的、滿滿的" },
+        { unit: 2, kana: "いつも", kanji: "いつも", chinese: "總是~" },
+        { unit: 2, kana: "いぬ", kanji: "犬", chinese: "狗" },
+        { unit: 2, kana: "いま", kanji: "今", chinese: "現在" },
+        { unit: 2, kana: "います", kanji: "います", chinese: "有、在" },
+        { unit: 2, kana: "いみ", kanji: "意味", chinese: "意思" },
+        { unit: 3, kana: "いもうと", kanji: "妹", chinese: "妹妹(謙稱)" },
+        { unit: 3, kana: "いりぐち", kanji: "入口", chinese: "入口" },
+        { unit: 3, kana: "いれます", kanji: "入れます", chinese: "放入" },
+        { unit: 3, kana: "いれます", kanji: "淹れます", chinese: "泡(茶、咖啡)" },
+        { unit: 3, kana: "いろ", kanji: "色", chinese: "顏色" },
+        { unit: 3, kana: "いろいろな", kanji: "色々", chinese: "各式各樣的" },
+        { unit: 3, kana: "ヴァイオリン", kanji: "Violin", chinese: "小提琴" },
+        { unit: 3, kana: "ヴィクトリア", kanji: "Victoria", chinese: "維多利亞" },
+        { unit: 3, kana: "うえ", kanji: "上", chinese: "上面" },
+        { unit: 3, kana: "ヴォーカル", kanji: "Vocal", chinese: "主唱" },
+        { unit: 3, kana: "うけつけ", kanji: "受付", chinese: "櫃檯" },
+        { unit: 3, kana: "うごきます", kanji: "動きます", chinese: "動" },
+        { unit: 3, kana: "うしろ", kanji: "後ろ", chinese: "後面" },
+        { unit: 3, kana: "うすい", kanji: "薄い", chinese: "薄的、淡的" },
+        { unit: 3, kana: "うた", kanji: "歌", chinese: "歌" },
+        { unit: 3, kana: "うたいます", kanji: "歌います", chinese: "唱(歌)" },
+        { unit: 3, kana: "うち", kanji: "内/家", chinese: "家" },
+        { unit: 3, kana: "うまい", kanji: "上手い", chinese: "美味的" },
+        { unit: 3, kana: "うみ", kanji: "海", chinese: "海、海洋" },
+        { unit: 3, kana: "うります", kanji: "売ります", chinese: "賣" },
+        { unit: 3, kana: "うるさい", kanji: "煩い", chinese: "吵鬧的、煩的" },
+        { unit: 3, kana: "うわぎ", kanji: "上着", chinese: "外套、上衣" },
+        { unit: 3, kana: "うんてんします", kanji: "運転します", chinese: "駕駛、開(車)" },
+        { unit: 3, kana: "うんどう", kanji: "運動", chinese: "運動" },
+        { unit: 3, kana: "うんどうかい", kanji: "運動会", chinese: "運動會" },
+        { unit: 3, kana: "え", kanji: "絵", chinese: "圖畫" },
+        { unit: 3, kana: "えいが", kanji: "映画", chinese: "電影" },
+        { unit: 3, kana: "えいがかん", kanji: "映画館", chinese: "電影院" },
+        { unit: 3, kana: "えいご", kanji: "英語", chinese: "英文" },
+        { unit: 3, kana: "えき", kanji: "駅", chinese: "車站" },
+        { unit: 4, kana: "えきまえ", kanji: "駅前", chinese: "車站前" },
+        { unit: 4, kana: "エム", kanji: "M", chinese: "M" },
+        { unit: 4, kana: "えらびます", kanji: "選びます", chinese: "選擇" },
+        { unit: 4, kana: "エル", kanji: "L", chinese: "L" },
+        { unit: 4, kana: "エレベーター", kanji: "Elevator", chinese: "電梯" },
+        { unit: 4, kana: "えん", kanji: "円", chinese: "日幣" },
+        { unit: 4, kana: "えんそうします", kanji: "演奏します", chinese: "演奏" },
+        { unit: 4, kana: "えんぴつ", kanji: "鉛筆", chinese: "鉛筆" },
+        { unit: 4, kana: "おいくつ", kanji: "おいくつ", chinese: "貴庚" },
+        { unit: 4, kana: "おいしい", kanji: "美味しい", chinese: "美味的" },
+        { unit: 4, kana: "おおい", kanji: "多い", chinese: "多數的" },
+        { unit: 4, kana: "おおきい", kanji: "大きい", chinese: "大的" },
+        { unit: 4, kana: "おおさか", kanji: "大阪", chinese: "大阪" },
+        { unit: 4, kana: "おおそうじ", kanji: "大掃除", chinese: "大掃除" },
+        { unit: 4, kana: "おかあさん", kanji: "お母さん", chinese: "母親(尊稱)" },
+        { unit: 4, kana: "おかし", kanji: "お菓子", chinese: "點心、零食" },
+        { unit: 4, kana: "おかね", kanji: "お金", chinese: "錢" },
+        { unit: 4, kana: "おきます", kanji: "起きます", chinese: "起床" },
+        { unit: 4, kana: "おきます", kanji: "置きます", chinese: "放置" },
+        { unit: 4, kana: "おきゃくさん", kanji: "お客さん", chinese: "客人(尊稱)" },
+        { unit: 4, kana: "おくさん", kanji: "奥さん", chinese: "太太(尊稱)" },
+        { unit: 4, kana: "おさけ", kanji: "お酒", chinese: "酒" },
+        { unit: 4, kana: "おさら", kanji: "お皿", chinese: "盤子" },
+        { unit: 4, kana: "おじいさん", kanji: "おじいさん", chinese: "祖父(尊稱)" },
+        { unit: 4, kana: "おしえます", kanji: "教えます", chinese: "教" },
+        { unit: 4, kana: "おします", kanji: "押します", chinese: "按壓推" },
+        { unit: 4, kana: "おしゃべり", kanji: "おしゃべり", chinese: "聊天" },
+        { unit: 4, kana: "おすし", kanji: "お寿司", chinese: "壽司" },
+        { unit: 4, kana: "おそい", kanji: "遅い", chinese: "慢的、晚的" },
+        { unit: 4, kana: "おちゃ", kanji: "お茶", chinese: "茶" },
+        { unit: 5, kana: "おちゃわん", kanji: "お茶碗", chinese: "飯碗" },
+        { unit: 5, kana: "おてあらい", kanji: "お手洗い", chinese: "洗手間、廁所" },
+        { unit: 5, kana: "おてら", kanji: "お寺", chinese: "寺院" },
+        { unit: 5, kana: "おとうさん", kanji: "お父さん", chinese: "父親(尊稱)" },
+        { unit: 5, kana: "おとうと", kanji: "弟", chinese: "弟弟(謙稱)" },
+        { unit: 5, kana: "おとこ", kanji: "男", chinese: "男、男人" },
+        { unit: 5, kana: "おとこのこ", kanji: "男の子", chinese: "男孩" },
+        { unit: 5, kana: "おとこのひと", kanji: "男の人", chinese: "男人、男生" },
+        { unit: 5, kana: "おととい", kanji: "おととい", chinese: "前天" },
+        { unit: 5, kana: "おととし", kanji: "おととし", chinese: "前年" },
+        { unit: 5, kana: "おとな", kanji: "大人", chinese: "大人" },
+        { unit: 5, kana: "おなか", kanji: "お腹", chinese: "肚子" },
+        { unit: 5, kana: "おにいさん", kanji: "お兄さん", chinese: "哥哥(尊稱)" },
+        { unit: 5, kana: "おば", kanji: "おば", chinese: "阿姨、伯母(謙稱)" },
+        { unit: 5, kana: "おばあさん", kanji: "おばあさん", chinese: "祖母(尊稱)" },
+        { unit: 5, kana: "おばさん", kanji: "おばさん", chinese: "阿姨、伯母(尊稱)" },
+        { unit: 5, kana: "おひる", kanji: "お昼", chinese: "中午" },
+        { unit: 5, kana: "おふろ", kanji: "お風呂", chinese: "澡堂、浴室" },
+        { unit: 5, kana: "おべんとう", kanji: "お弁当", chinese: "便當" },
+        { unit: 5, kana: "おぼえます", kanji: "覚えます", chinese: "記" },
+        { unit: 5, kana: "おまわりさん", kanji: "おまわりさん", chinese: "警察" },
+        { unit: 5, kana: "おみあい", kanji: "お見合い", chinese: "相親" },
+        { unit: 5, kana: "おもい", kanji: "重い", chinese: "重的" },
+        { unit: 5, kana: "おもしろい", kanji: "面白い", chinese: "有趣的、好笑的" },
+        { unit: 5, kana: "おやすみ", kanji: "お休み", chinese: "放假、休假" },
+        { unit: 5, kana: "およぎます", kanji: "泳ぎます", chinese: "游" },
+        { unit: 5, kana: "オリーヴ", kanji: "Olive", chinese: "橄欖" },
+        { unit: 5, kana: "おります", kanji: "降ります", chinese: "下(樓、車)" },
+        { unit: 5, kana: "おわります", kanji: "終わります", chinese: "結束" },
+        { unit: 5, kana: "おんがく", kanji: "音楽", chinese: "音樂" },
+        { unit: 6, kana: "おんせん", kanji: "温泉", chinese: "溫泉" },
+        { unit: 6, kana: "おんな", kanji: "女", chinese: "女人" },
+        { unit: 6, kana: "カード", kanji: "Card", chinese: "卡片、信用卡" },
+        { unit: 6, kana: "かいぎ", kanji: "会議", chinese: "會議" },
+        { unit: 6, kana: "がいこく", kanji: "外国", chinese: "外國" },
+        { unit: 6, kana: "かいしゃ", kanji: "会社", chinese: "公司" },
+        { unit: 6, kana: "かいだん", kanji: "階段", chinese: "樓梯" },
+        { unit: 6, kana: "かいます", kanji: "買います", chinese: "買" },
+        { unit: 6, kana: "かいもの", kanji: "買い物", chinese: "購物" },
+        { unit: 6, kana: "かいものします", kanji: "買い物します", chinese: "購物" },
+        { unit: 6, kana: "かいわ", kanji: "会話", chinese: "會話" },
+        { unit: 6, kana: "かいわします", kanji: "会話します", chinese: "對話、會話" },
+        { unit: 6, kana: "かえします", kanji: "返します", chinese: "返還" },
+        { unit: 6, kana: "かえります", kanji: "帰ります", chinese: "回去、回來" },
+        { unit: 6, kana: "かお", kanji: "顔", chinese: "臉" },
+        { unit: 6, kana: "かぎ", kanji: "鍵", chinese: "鑰匙" },
+        { unit: 6, kana: "かきます", kanji: "書きます", chinese: "寫" },
+        { unit: 6, kana: "かきます", kanji: "描きます", chinese: "畫(圖畫)" },
+        { unit: 6, kana: "がくせい", kanji: "学生", chinese: "學生" },
+        { unit: 6, kana: "かくにんします", kanji: "確認します", chinese: "確認" },
+        { unit: 6, kana: "かけます", kanji: "掛けます", chinese: "掛(衣服)、打(電話)" },
+        { unit: 6, kana: "かさ", kanji: "傘", chinese: "雨傘" },
+        { unit: 6, kana: "かします", kanji: "貸します", chinese: "借出" },
+        { unit: 6, kana: "かしゅ", kanji: "歌手", chinese: "歌手" },
+        { unit: 6, kana: "かぜ", kanji: "風", chinese: "風" },
+        { unit: 6, kana: "かぜ", kanji: "風邪", chinese: "感冒" },
+        { unit: 6, kana: "かぞく", kanji: "家族", chinese: "家人" },
+        { unit: 6, kana: "かた", kanji: "方", chinese: "位(尊稱)" },
+        { unit: 6, kana: "かたち", kanji: "形", chinese: "形狀" },
+        { unit: 6, kana: "がっこう", kanji: "学校", chinese: "學校" },
+        { unit: 7, kana: "カッターナイフ", kanji: "Cutter knife", chinese: "美工刀" },
+        { unit: 7, kana: "カップ", kanji: "Cup", chinese: "杯子" },
+        { unit: 7, kana: "かど", kanji: "角", chinese: "轉角" },
+        { unit: 7, kana: "かのじょ", kanji: "彼女", chinese: "她、女朋友" },
+        { unit: 7, kana: "カバン", kanji: "Bag", chinese: "包包" },
+        { unit: 7, kana: "かびん", kanji: "花瓶", chinese: "花瓶" },
+        { unit: 7, kana: "カフェ", kanji: "Cafe", chinese: "咖啡廳" },
+        { unit: 7, kana: "かぶります", kanji: "被ります", chinese: "戴(帽子)" },
+        { unit: 7, kana: "かまいます", kanji: "構いません", chinese: "在意、關係" },
+        { unit: 7, kana: "かみ", kanji: "紙", chinese: "紙" },
+        { unit: 7, kana: "かみのけ", kanji: "髪の毛", chinese: "頭髮" },
+        { unit: 7, kana: "カメラ", kanji: "Camera", chinese: "照相機" },
+        { unit: 7, kana: "からい", kanji: "辛い", chinese: "辣的、鹹的" },
+        { unit: 7, kana: "からだ", kanji: "体", chinese: "身體" },
+        { unit: 7, kana: "かります", kanji: "借ります", chinese: "借入" },
+        { unit: 7, kana: "かるい", kanji: "軽い", chinese: "輕的" },
+        { unit: 7, kana: "かれ", kanji: "彼", chinese: "他、男朋友" },
+        { unit: 7, kana: "カレー", kanji: "Curry", chinese: "咖哩" },
+        { unit: 7, kana: "かれたち", kanji: "彼たち", chinese: "他們" },
+        { unit: 7, kana: "カレンダー", kanji: "Calendar", chinese: "日曆、月曆" },
+        { unit: 7, kana: "かわ", kanji: "川", chinese: "河川" },
+        { unit: 7, kana: "かわいい", kanji: "可愛い", chinese: "可愛的" },
+        { unit: 7, kana: "かんこく", kanji: "韓国", chinese: "韓國" },
+        { unit: 7, kana: "かんじ", kanji: "漢字", chinese: "漢字" },
+        { unit: 7, kana: "かんたんな", kanji: "簡単な", chinese: "簡單的" },
+        { unit: 7, kana: "かんらんしゃ", kanji: "観覧車", chinese: "摩天輪" },
+        { unit: 7, kana: "きいろい", kanji: "黄色い", chinese: "黃色的" },
+        { unit: 7, kana: "ききます", kanji: "聞きます", chinese: "聽" },
+        { unit: 7, kana: "ききます", kanji: "聞きます", chinese: "問" },
+        { unit: 7, kana: "きた", kanji: "北", chinese: "北(邊、方)" },
+        { unit: 8, kana: "ギター", kanji: "Guitar", chinese: "吉他" },
+        { unit: 8, kana: "きたない", kanji: "汚い", chinese: "髒亂的" },
+        { unit: 8, kana: "きっさてん", kanji: "喫茶店", chinese: "咖啡廳" },
+        { unit: 8, kana: "きって", kanji: "切手", chinese: "郵票" },
+        { unit: 8, kana: "きっぷ", kanji: "切符", chinese: "車票" },
+        { unit: 8, kana: "きのう", kanji: "昨日", chinese: "昨天" },
+        { unit: 8, kana: "きます", kanji: "来ます", chinese: "來" },
+        { unit: 8, kana: "きます", kanji: "着ます", chinese: "穿(上半身)" },
+        { unit: 8, kana: "きゅうしゅう", kanji: "九州", chinese: "九州" },
+        { unit: 8, kana: "ぎゅうにく", kanji: "牛肉", chinese: "牛肉" },
+        { unit: 8, kana: "ぎゅうにゅう", kanji: "牛乳", chinese: "牛奶" },
+        { unit: 8, kana: "きゅうりょうび", kanji: "給料日", chinese: "發薪日" },
+        { unit: 8, kana: "きょう", kanji: "今日", chinese: "今天" },
+        { unit: 8, kana: "ぎょうざ", kanji: "餃子", chinese: "煎餃" },
+        { unit: 8, kana: "きょうしつ", kanji: "教室", chinese: "教室" },
+        { unit: 8, kana: "きょうだい", kanji: "兄弟", chinese: "兄弟姊妹" },
+        { unit: 8, kana: "きょねん", kanji: "去年", chinese: "去年" },
+        { unit: 8, kana: "きらいな", kanji: "嫌いな", chinese: "討厭的、不喜歡的" },
+        { unit: 8, kana: "きれいな", kanji: "綺麗な", chinese: "漂亮的、乾淨的" },
+        { unit: 8, kana: "ぎんこう", kanji: "銀行", chinese: "銀行" },
+        { unit: 8, kana: "くうこう", kanji: "空港", chinese: "機場" },
+        { unit: 8, kana: "くすり", kanji: "薬", chinese: "藥" },
+        { unit: 8, kana: "ください", kanji: "下さい", chinese: "請給(我)" },
+        { unit: 8, kana: "くだもの", kanji: "果物", chinese: "水果" },
+        { unit: 8, kana: "くち", kanji: "口", chinese: "嘴巴" },
+        { unit: 8, kana: "くつ", kanji: "靴", chinese: "鞋子" },
+        { unit: 8, kana: "くつした", kanji: "靴下", chinese: "襪子" },
+        { unit: 8, kana: "くつばこ", kanji: "靴箱", chinese: "鞋櫃" },
+        { unit: 8, kana: "くに", kanji: "国", chinese: "國家" },
+        { unit: 8, kana: "くらい", kanji: "暗い", chinese: "暗的" },
+        { unit: 9, kana: "クラス", kanji: "Class", chinese: "班級" },
+        { unit: 9, kana: "クラスメート", kanji: "Classmate", chinese: "同學" },
+        { unit: 9, kana: "グループ", kanji: "Group", chinese: "團體、群組" },
+        { unit: 9, kana: "くるま", kanji: "車", chinese: "車子、汽車" },
+        { unit: 9, kana: "くれます", kanji: "くれます", chinese: "給(我)" },
+        { unit: 9, kana: "くろ", kanji: "黒", chinese: "黑色" },
+        { unit: 9, kana: "くろい", kanji: "黒い", chinese: "黑色的" },
+        { unit: 9, kana: "ケーキ", kanji: "Cake", chinese: "蛋糕" },
+        { unit: 9, kana: "ゲーム", kanji: "Game", chinese: "遊戲" },
+        { unit: 9, kana: "けいたい(でんわ)", kanji: "携帯", chinese: "手機" },
+        { unit: 9, kana: "けさ", kanji: "今朝", chinese: "今天早上" },
+        { unit: 9, kana: "けしゴム", kanji: "消しゴム", chinese: "橡皮擦" },
+        { unit: 9, kana: "けしょう", kanji: "化粧", chinese: "化妝" },
+        { unit: 9, kana: "けっこん", kanji: "結婚", chinese: "結婚" },
+        { unit: 9, kana: "けっこんします", kanji: "結婚します", chinese: "結婚" },
+        { unit: 9, kana: "げん", kanji: "元", chinese: "(台幣)元" },
+        { unit: 9, kana: "げんかん", kanji: "玄関", chinese: "玄關" },
+        { unit: 9, kana: "げんきな", kanji: "元気な", chinese: "有活力的、有精神的" },
+        { unit: 9, kana: "げんきん", kanji: "現金", chinese: "現金" },
+        { unit: 9, kana: "けんさ", kanji: "検査", chinese: "檢查" },
+        { unit: 9, kana: "げんだいじん", kanji: "現代人", chinese: "現代人" },
+        { unit: 9, kana: "コーヒー", kanji: "Coffee", chinese: "咖啡" },
+        { unit: 9, kana: "コーラ", kanji: "Cola", chinese: "可樂" },
+        { unit: 9, kana: "こうえん", kanji: "公園", chinese: "公園" },
+        { unit: 9, kana: "こうこう", kanji: "高校", chinese: "高中" },
+        { unit: 9, kana: "こうこうせい", kanji: "高校生", chinese: "高中生" },
+        { unit: 9, kana: "こうさてん", kanji: "交差点", chinese: "十字路口" },
+        { unit: 9, kana: "こうちゃ", kanji: "紅茶", chinese: "紅茶" },
+        { unit: 9, kana: "こうつう", kanji: "交通", chinese: "交通" },
+        { unit: 9, kana: "こうはい", kanji: "後輩", chinese: "學弟、學妹" },
+        { unit: 10, kana: "こうばん", kanji: "交番", chinese: "派出所" },
+        { unit: 10, kana: "こえ", kanji: "声", chinese: "聲音" },
+        { unit: 10, kana: "ここ", kanji: "ここ", chinese: "這裡" },
+        { unit: 10, kana: "こと", kanji: "事", chinese: "事情" },
+        { unit: 10, kana: "ことし", kanji: "今年", chinese: "今年" },
+        { unit: 10, kana: "ことば", kanji: "言葉", chinese: "話語、單字" },
+        { unit: 10, kana: "こども", kanji: "子供", chinese: "小孩" },
+        { unit: 10, kana: "この", kanji: "この", chinese: "這個+名詞" },
+        { unit: 10, kana: "ごはん", kanji: "ご飯", chinese: "飯、白飯" },
+        { unit: 10, kana: "こぶた", kanji: "子豚", chinese: "小豬" },
+        { unit: 10, kana: "こまります", kanji: "困ります", chinese: "困擾" },
+        { unit: 10, kana: "ごみ", kanji: "ごみ", chinese: "垃圾" },
+        { unit: 10, kana: "ごみばこ", kanji: "ごみ箱", chinese: "垃圾桶" },
+        { unit: 10, kana: "コミュニケーション", kanji: "Communication", chinese: "溝通" },
+        { unit: 10, kana: "ゴルフ", kanji: "Golf", chinese: "高爾夫球" },
+        { unit: 10, kana: "これ", kanji: "これ", chinese: "這個" },
+        { unit: 10, kana: "こんげつ", kanji: "今月", chinese: "這個月" },
+        { unit: 10, kana: "こんしゅう", kanji: "今週", chinese: "這週" },
+        { unit: 10, kana: "こんばん", kanji: "今晩", chinese: "今夜" },
+        { unit: 10, kana: "コンビニ", kanji: "Convenience store", chinese: "便利商店" },
+        { unit: 10, kana: "コンピューター", kanji: "Computer", chinese: "電腦" },
+        { unit: 10, kana: "こんや", kanji: "今夜", chinese: "今天夜間" },
+        { unit: 10, kana: "さあ", kanji: "さあ", chinese: "來吧、好吧" },
+        { unit: 10, kana: "さいきん", kanji: "最近", chinese: "最近" },
+        { unit: 10, kana: "さいふ", kanji: "財布", chinese: "錢包" },
+        { unit: 10, kana: "さかな", kanji: "魚", chinese: "魚" },
+        { unit: 10, kana: "さきに", kanji: "先に", chinese: "先" },
+        { unit: 10, kana: "さくばん", kanji: "昨晩", chinese: "昨晚" },
+        { unit: 10, kana: "さくぶん", kanji: "作文", chinese: "作文" },
+        { unit: 10, kana: "さくら", kanji: "桜", chinese: "櫻花" },
+        { unit: 11, kana: "さけ", kanji: "酒", chinese: "酒" },
+        { unit: 11, kana: "サッカー", kanji: "Soccer", chinese: "足球" },
+        { unit: 11, kana: "ざっし", kanji: "雑誌", chinese: "雜誌" },
+        { unit: 11, kana: "さとう", kanji: "砂糖", chinese: "砂糖" },
+        { unit: 11, kana: "さみしい", kanji: "寂しい", chinese: "寂寞的" },
+        { unit: 11, kana: "さむい", kanji: "寒い", chinese: "寒冷的" },
+        { unit: 11, kana: "さらいげつ", kanji: "再来月", chinese: "下下個月" },
+        { unit: 11, kana: "さらいしゅう", kanji: "再来週", chinese: "下下周" },
+        { unit: 11, kana: "さらいねん", kanji: "再来年", chinese: "後年" },
+        { unit: 11, kana: "サラリーマン", kanji: "Salaryman", chinese: "上班族" },
+        { unit: 11, kana: "ざんぎょう", kanji: "残業", chinese: "加班" },
+        { unit: 11, kana: "さんぽ", kanji: "散歩", chinese: "散步" },
+        { unit: 11, kana: "じ", kanji: "字", chinese: "字" },
+        { unit: 11, kana: "シーディー", kanji: "CD", chinese: "CD" },
+        { unit: 11, kana: "ジェットき", kanji: "Jet", chinese: "噴射機" },
+        { unit: 11, kana: "シェフ", kanji: "Chef", chinese: "廚師" },
+        { unit: 11, kana: "しお", kanji: "塩", chinese: "鹽巴" },
+        { unit: 11, kana: "じかん", kanji: "時間", chinese: "時間" },
+        { unit: 11, kana: "しけん", kanji: "試験", chinese: "考試" },
+        { unit: 11, kana: "しけんべんきょう", kanji: "試験勉強", chinese: "考前K書" },
+        { unit: 11, kana: "しごと", kanji: "仕事", chinese: "工作" },
+        { unit: 11, kana: "しごとします", kanji: "仕事します", chinese: "(做)工作" },
+        { unit: 11, kana: "じしょ", kanji: "辞書", chinese: "字典" },
+        { unit: 11, kana: "しずかな", kanji: "静かな", chinese: "安靜的" },
+        { unit: 11, kana: "した", kanji: "下", chinese: "下面" },
+        { unit: 11, kana: "したしい", kanji: "親しい", chinese: "熟稔的、親近的" },
+        { unit: 11, kana: "しちゃくします", kanji: "試着します", chinese: "試穿" },
+        { unit: 11, kana: "しつもん", kanji: "質問", chinese: "問題、疑問" },
+        { unit: 11, kana: "しつもんします", kanji: "質問します", chinese: "提問、發問" },
+        { unit: 11, kana: "じてんしゃ", kanji: "自転車", chinese: "腳踏車" },
+        { unit: 12, kana: "しにます", kanji: "死にます", chinese: "死" },
+        { unit: 12, kana: "じぶん", kanji: "自分", chinese: "自己" },
+        { unit: 12, kana: "しゃいんりょこう", kanji: "社員旅行", chinese: "員工旅行" },
+        { unit: 12, kana: "しゃしん", kanji: "写真", chinese: "照片" },
+        { unit: 12, kana: "しゃちょう", kanji: "社長", chinese: "老闆、社長" },
+        { unit: 12, kana: "シャツ", kanji: "Shirt", chinese: "襯衫" },
+        { unit: 12, kana: "シャワー", kanji: "Shower", chinese: "淋浴" },
+        { unit: 12, kana: "ジュース", kanji: "Juice", chinese: "果汁、甜的飲料" },
+        { unit: 12, kana: "じゅうしょ", kanji: "住所", chinese: "住址" },
+        { unit: 12, kana: "じゅぎょう", kanji: "授業", chinese: "課堂" },
+        { unit: 12, kana: "じゅく", kanji: "塾", chinese: "補習班" },
+        { unit: 12, kana: "しゅくだい", kanji: "宿題", chinese: "功課、作業" },
+        { unit: 12, kana: "しゅじん", kanji: "主人", chinese: "丈夫、主人" },
+        { unit: 12, kana: "しゅっきんします", kanji: "出勤します", chinese: "出門上班" },
+        { unit: 12, kana: "しゅっしん", kanji: "出身", chinese: "出生(地)" },
+        { unit: 12, kana: "しゅっちょう", kanji: "出張", chinese: "出差" },
+        { unit: 12, kana: "しゅっちょうします", kanji: "出張します", chinese: "(去)出差" },
+        { unit: 12, kana: "しゅっぱつします", kanji: "出発します", chinese: "出發" },
+        { unit: 12, kana: "しゅみ", kanji: "趣味", chinese: "興趣" },
+        { unit: 12, kana: "じゅんびうんどう", kanji: "準備運動", chinese: "暖身操" },
+        { unit: 12, kana: "しょうがくせい", kanji: "小学生", chinese: "小學生" },
+        { unit: 12, kana: "しょうけんがいしゃ", kanji: "証券会社", chinese: "證券公司" },
+        { unit: 12, kana: "しょうご", kanji: "正午", chinese: "正中午" },
+        { unit: 12, kana: "しょうじ", kanji: "商社", chinese: "商社" },
+        { unit: 12, kana: "じょうずな", kanji: "上手な", chinese: "(做得)好的、流利的" },
+        { unit: 12, kana: "しょうせつ", kanji: "小説", chinese: "小說" },
+        { unit: 12, kana: "しょうせつか", kanji: "小説家", chinese: "小說家" },
+        { unit: 12, kana: "じょうぶな", kanji: "丈夫な", chinese: "堅固的" },
+        { unit: 12, kana: "しょうゆ", kanji: "醤油", chinese: "醬油" },
+        { unit: 12, kana: "しょくじ", kanji: "食事", chinese: "吃飯、飯局" },
+        { unit: 13, kana: "しょくじします", kanji: "食事します", chinese: "吃飯、用餐" },
+        { unit: 13, kana: "しょくどう", kanji: "食堂", chinese: "餐廳" },
+        { unit: 13, kana: "しります", kanji: "知ります", chinese: "知道" },
+        { unit: 13, kana: "しろい", kanji: "白い", chinese: "白色的" },
+        { unit: 13, kana: "しんかんせん", kanji: "新幹線", chinese: "新幹線" },
+        { unit: 13, kana: "しんじゅく", kanji: "新宿", chinese: "新宿" },
+        { unit: 13, kana: "しんぶん", kanji: "新聞", chinese: "報紙" },
+        { unit: 13, kana: "じんみんげん", kanji: "人民元", chinese: "人民幣" },
+        { unit: 13, kana: "スーツ", kanji: "Suit", chinese: "西裝、套裝" },
+        { unit: 13, kana: "スーパー", kanji: "Supermarket", chinese: "超級市場" },
+        { unit: 13, kana: "すいます", kanji: "吸います", chinese: "抽、吸" },
+        { unit: 13, kana: "スキー", kanji: "Ski", chinese: "滑雪" },
+        { unit: 13, kana: "すきな", kanji: "好きな", chinese: "喜歡的" },
+        { unit: 13, kana: "すくない", kanji: "少ない", chinese: "少的" },
+        { unit: 13, kana: "すぐに", kanji: "すぐに", chinese: "馬上" },
+        { unit: 13, kana: "すこし", kanji: "少し", chinese: "少許、一點" },
+        { unit: 13, kana: "すずしい", kanji: "涼しい", chinese: "涼快的" },
+        { unit: 13, kana: "すてます", kanji: "捨てます", chinese: "丟掉、捨棄" },
+        { unit: 13, kana: "ストーブ", kanji: "Stove", chinese: "暖爐" },
+        { unit: 13, kana: "スパゲティー", kanji: "Spaghetti", chinese: "義大利麵" },
+        { unit: 13, kana: "スプーン", kanji: "Spoon", chinese: "湯匙" },
+        { unit: 13, kana: "スペイン", kanji: "Spain", chinese: "西班牙" },
+        { unit: 13, kana: "スポーツ", kanji: "Sport", chinese: "運動" },
+        { unit: 13, kana: "ズボン", kanji: "Trousers", chinese: "褲子" },
+        { unit: 13, kana: "スリッパ", kanji: "Slippers", chinese: "拖鞋" },
+        { unit: 13, kana: "すわります", kanji: "座ります", chinese: "坐" },
+        { unit: 13, kana: "セーター", kanji: "Sweater", chinese: "毛衣" },
+        { unit: 13, kana: "せいかく", kanji: "性格", chinese: "個性" },
+        { unit: 13, kana: "せいかつ", kanji: "生活", chinese: "生活" },
+        { unit: 13, kana: "せいと", kanji: "生徒", chinese: "學生" },
+        { unit: 14, kana: "せいとたち", kanji: "生徒たち", chinese: "學生們" },
+        { unit: 14, kana: "せいのう", kanji: "性能", chinese: "性能" },
+        { unit: 14, kana: "せいふく", kanji: "制服", chinese: "制服" },
+        { unit: 14, kana: "せかい", kanji: "世界", chinese: "世界" },
+        { unit: 14, kana: "せ/せい", kanji: "背", chinese: "身高" },
+        { unit: 14, kana: "せっけん", kanji: "石鹸", chinese: "肥皂" },
+        { unit: 14, kana: "せまい", kanji: "狭い", chinese: "狹窄的" },
+        { unit: 14, kana: "せんげつ", kanji: "先月", chinese: "上個月" },
+        { unit: 14, kana: "せんしゅう", kanji: "先週", chinese: "上週" },
+        { unit: 14, kana: "せんせい", kanji: "先生", chinese: "老師" },
+        { unit: 14, kana: "ぜんぜん", kanji: "全然", chinese: "完全不~、一點都不~" },
+        { unit: 14, kana: "せんせんげつ", kanji: "先々月", chinese: "上上個月" },
+        { unit: 14, kana: "せんせんしゅう", kanji: "先々週", chinese: "上上週" },
+        { unit: 14, kana: "せんたく", kanji: "洗濯", chinese: "洗衣" },
+        { unit: 14, kana: "せんたくします", kanji: "洗濯します", chinese: "洗衣" },
+        { unit: 14, kana: "せんぱい", kanji: "先輩", chinese: "學長、學姊" },
+        { unit: 14, kana: "そうじ", kanji: "掃除", chinese: "打掃" },
+        { unit: 14, kana: "そうじします", kanji: "掃除します", chinese: "打掃" },
+        { unit: 14, kana: "そうりだいじん", kanji: "総理大臣", chinese: "總理大臣(首相)" },
+        { unit: 14, kana: "そこ", kanji: "そこ", chinese: "那裡" },
+        { unit: 14, kana: "そして", kanji: "そして", chinese: "然後" },
+        { unit: 14, kana: "そそぎます", kanji: "注ぎます", chinese: "倒入、注入" },
+        { unit: 14, kana: "そちら", kanji: "そちら", chinese: "那個、那裡、那位" },
+        { unit: 14, kana: "そつぎょうします", kanji: "卒業します", chinese: "畢業" },
+        { unit: 14, kana: "そと", kanji: "外", chinese: "外面" },
+        { unit: 14, kana: "ソニー", kanji: "SONY", chinese: "SONY" },
+        { unit: 14, kana: "その", kanji: "その", chinese: "那個+名詞" },
+        { unit: 14, kana: "そば", kanji: "そば", chinese: "旁邊" },
+        { unit: 14, kana: "そふ", kanji: "祖父", chinese: "祖父(謙稱)" },
+        { unit: 14, kana: "そぼ", kanji: "祖母", chinese: "祖母(謙稱)" },
+        { unit: 15, kana: "そら", kanji: "空", chinese: "天空" },
+        { unit: 15, kana: "それ", kanji: "それ", chinese: "那個" },
+        { unit: 15, kana: "それとも", kanji: "それとも", chinese: "還是~" },
+        { unit: 15, kana: "それに", kanji: "それに", chinese: "而且" },
+        { unit: 15, kana: "だいがく", kanji: "大学", chinese: "大學" },
+        { unit: 15, kana: "だいがくせい", kanji: "大学生", chinese: "大學生" },
+        { unit: 15, kana: "たいしかん", kanji: "大使館", chinese: "大使館" },
+        { unit: 15, kana: "だいじょうぶな", kanji: "大丈夫な", chinese: "沒問題的" },
+        { unit: 15, kana: "たいせつな", kanji: "大切な", chinese: "重要的" },
+        { unit: 15, kana: "だいどころ", kanji: "台所", chinese: "廚房" },
+        { unit: 15, kana: "だいへんな", kanji: "大変な", chinese: "辛苦的、麻煩的" },
+        { unit: 15, kana: "たいわん", kanji: "台湾", chinese: "台灣" },
+        { unit: 15, kana: "たいわんじん", kanji: "台湾人", chinese: "台灣人" },
+        { unit: 15, kana: "たいわんドル", kanji: "台湾ドル", chinese: "台幣" },
+        { unit: 15, kana: "たかい", kanji: "高い", chinese: "貴的" },
+        { unit: 15, kana: "たかい", kanji: "高い", chinese: "高的" },
+        { unit: 15, kana: "だから", kanji: "だから", chinese: "所以" },
+        { unit: 15, kana: "たくさん", kanji: "たくさん", chinese: "很多" },
+        { unit: 15, kana: "タクシー", kanji: "Taxi", chinese: "計程車" },
+        { unit: 15, kana: "たすけます", kanji: "助けます", chinese: "救、救援" },
+        { unit: 15, kana: "ただしい", kanji: "正しい", chinese: "正確的" },
+        { unit: 15, kana: "たちます", kanji: "立ちます", chinese: "站立" },
+        { unit: 15, kana: "たてもの", kanji: "建物", chinese: "建築物" },
+        { unit: 15, kana: "たとえ", kanji: "たとえ", chinese: "就算、即使" },
+        { unit: 15, kana: "たのしい", kanji: "楽しい", chinese: "快樂的、愉快的" },
+        { unit: 15, kana: "タバコ", kanji: "Tobacco", chinese: "香菸" },
+        { unit: 15, kana: "たべます", kanji: "食べます", chinese: "吃" },
+        { unit: 15, kana: "たべもの", kanji: "食べ物", chinese: "食物" },
+        { unit: 15, kana: "たまご", kanji: "卵", chinese: "蛋" },
+        { unit: 15, kana: "だめな", kanji: "だめな", chinese: "不行的" },
+        { unit: 16, kana: "だれ", kanji: "誰", chinese: "誰" },
+        { unit: 16, kana: "たんご", kanji: "単語", chinese: "單字" },
+        { unit: 16, kana: "たんじょうび", kanji: "誕生日", chinese: "生日" },
+        { unit: 16, kana: "ダンス", kanji: "Dance", chinese: "跳舞、舞蹈" },
+        { unit: 16, kana: "ちいさい", kanji: "小さい", chinese: "小的" },
+        { unit: 16, kana: "チェック", kanji: "Check", chinese: "格紋、確認" },
+        { unit: 16, kana: "ちかい", kanji: "近い", chinese: "近的" },
+        { unit: 16, kana: "ちかく", kanji: "近く", chinese: "附近" },
+        { unit: 16, kana: "ちず", kanji: "地図", chinese: "地圖" },
+        { unit: 16, kana: "ちち", kanji: "父", chinese: "父親(謙稱)" },
+        { unit: 16, kana: "ちゃいろ", kanji: "茶色", chinese: "咖啡色" },
+        { unit: 16, kana: "ちゅうがくせい", kanji: "中学生", chinese: "國中生" },
+        { unit: 16, kana: "ちゅうごくご", kanji: "中国語", chinese: "中文" },
+        { unit: 16, kana: "ちゅうしょく", kanji: "昼食", chinese: "午餐" },
+        { unit: 16, kana: "ちょうしょく", kanji: "朝食", chinese: "早餐" },
+        { unit: 16, kana: "チョコレート", kanji: "Chocolate", chinese: "巧克力" },
+        { unit: 16, kana: "つうきん", kanji: "通勤", chinese: "通勤" },
+        { unit: 16, kana: "つかいます", kanji: "使います", chinese: "使用、用~" },
+        { unit: 16, kana: "つかれます", kanji: "疲れます", chinese: "累" },
+        { unit: 16, kana: "つきひ", kanji: "月日", chinese: "日期" },
+        { unit: 16, kana: "つきます", kanji: "着きます", chinese: "到" },
+        { unit: 16, kana: "つくえ", kanji: "机", chinese: "桌子" },
+        { unit: 16, kana: "つくります", kanji: "作ります", chinese: "作" },
+        { unit: 16, kana: "つけます", kanji: "つけます", chinese: "開(燈)" },
+        { unit: 16, kana: "つけます", kanji: "つけます", chinese: "配戴" },
+        { unit: 16, kana: "つとめます", kanji: "勤めます", chinese: "任職" },
+        { unit: 16, kana: "つまらない", kanji: "つまらない", chinese: "無聊的" },
+        { unit: 16, kana: "つめたい", kanji: "冷たい", chinese: "冰冷的、冷淡的" },
+        { unit: 16, kana: "つよい", kanji: "強い", chinese: "強的" },
+        { unit: 16, kana: "つり", kanji: "釣り", chinese: "釣魚" },
+        { unit: 16, kana: "だれ", kanji: "誰", chinese: "誰" },
+        { unit: 16, kana: "たんご", kanji: "単語", chinese: "單字" },
+        { unit: 16, kana: "たんじょうび", kanji: "誕生日", chinese: "生日" },
+        { unit: 16, kana: "ダンス", kanji: "Dance", chinese: "跳舞、舞蹈" },
+        { unit: 16, kana: "ちいさい", kanji: "小さい", chinese: "小的" },
+        { unit: 16, kana: "チェック", kanji: "Check", chinese: "格紋、確認" },
+        { unit: 16, kana: "ちかい", kanji: "近い", chinese: "近的" },
+        { unit: 16, kana: "ちかく", kanji: "近く", chinese: "附近" },
+        { unit: 16, kana: "ちず", kanji: "地図", chinese: "地圖" },
+        { unit: 16, kana: "ちち", kanji: "父", chinese: "父親(謙稱)" },
+        { unit: 16, kana: "ちゃいろ", kanji: "茶色", chinese: "咖啡色" },
+        { unit: 16, kana: "ちゅうがくせい", kanji: "中学生", chinese: "國中生" },
+        { unit: 16, kana: "ちゅうごくご", kanji: "中国語", chinese: "中文" },
+        { unit: 16, kana: "ちゅうしょく", kanji: "昼食", chinese: "午餐" },
+        { unit: 16, kana: "ちょうしょく", kanji: "朝食", chinese: "早餐" },
+        { unit: 16, kana: "チョコレート", kanji: "Chocolate", chinese: "巧克力" },
+        { unit: 16, kana: "つうきん", kanji: "通勤", chinese: "通勤" },
+        { unit: 16, kana: "つかいます", kanji: "使います", chinese: "使用、用~" },
+        { unit: 16, kana: "つかれます", kanji: "疲れます", chinese: "累" },
+        { unit: 16, kana: "つきひ", kanji: "月日", chinese: "日期" },
+        { unit: 16, kana: "つきます", kanji: "着きます", chinese: "到" },
+        { unit: 16, kana: "つくえ", kanji: "机", chinese: "桌子" },
+        { unit: 16, kana: "つくります", kanji: "作ります", chinese: "作" },
+        { unit: 16, kana: "つけます", kanji: "つけます", chinese: "開(燈)" },
+        { unit: 16, kana: "つけます", kanji: "つけます", chinese: "配戴" },
+        { unit: 16, kana: "つとめます", kanji: "勤めます", chinese: "任職" },
+        { unit: 16, kana: "つまらない", kanji: "つまらない", chinese: "無聊的" },
+        { unit: 16, kana: "つめたい", kanji: "冷たい", chinese: "冰冷的、冷淡的" },
+        { unit: 16, kana: "つよい", kanji: "強い", chinese: "強的" },
+        { unit: 16, kana: "つり", kanji: "釣り", chinese: "釣魚" },
+
+        // Unit 17
+        { unit: 17, kana: "て", kanji: "手", chinese: "手" },
+        { unit: 17, kana: "デート", kanji: "Date", chinese: "約會" },
+        { unit: 17, kana: "テーブル", kanji: "Table", chinese: "桌子" },
+        { unit: 17, kana: "テープレコーダー", kanji: "Tape recorder", chinese: "錄音機" },
+        { unit: 17, kana: "ていしゅつします", kanji: "提出します", chinese: "提出、交出" },
+        { unit: 17, kana: "でかけます", kanji: "出かけます", chinese: "出門" },
+        { unit: 17, kana: "てがみ", kanji: "手紙", chinese: "信" },
+        { unit: 17, kana: "できます", kanji: "できます", chinese: "會" },
+        { unit: 17, kana: "でぐち", kanji: "出口", chinese: "出口" },
+        { unit: 17, kana: "テスト", kanji: "Test", chinese: "考試" },
+        { unit: 17, kana: "テニス", kanji: "Tennis", chinese: "網球" },
+        { unit: 17, kana: "テニスします", kanji: "Tennisします", chinese: "打網球" },
+        { unit: 17, kana: "デパート", kanji: "Department store", chinese: "百貨公司" },
+        { unit: 17, kana: "でも", kanji: "でも", chinese: "但是" },
+        { unit: 17, kana: "テレビ", kanji: "Television", chinese: "電視" },
+        { unit: 17, kana: "てんいん", kanji: "店員", chinese: "店員" },
+        { unit: 17, kana: "てんき", kanji: "天気", chinese: "天氣" },
+        { unit: 17, kana: "でんき", kanji: "電気", chinese: "電燈、電" },
+        { unit: 17, kana: "てんきよほう", kanji: "天気予報", chinese: "天氣預報" },
+        { unit: 17, kana: "でんしじしょ", kanji: "電子辞書", chinese: "電子字典" },
+        { unit: 17, kana: "でんしゃ", kanji: "電車", chinese: "電車" },
+        { unit: 17, kana: "でんち", kanji: "電池", chinese: "電池" },
+        { unit: 17, kana: "てんぷら", kanji: "Tempura", chinese: "天婦羅" },
+        { unit: 17, kana: "でんわ", kanji: "電話", chinese: "電話" },
+        { unit: 17, kana: "でんわします", kanji: "電話します", chinese: "打電話、講電話" },
+        { unit: 17, kana: "でんわばんごう", kanji: "電話番号", chinese: "電話號碼" },
+        { unit: 17, kana: "ドア", kanji: "Door", chinese: "門" },
+        { unit: 17, kana: "トイレ", kanji: "Toilet", chinese: "廁所" },
+        { unit: 17, kana: "どう", kanji: "どう", chinese: "如何、怎麼樣" },
+        { unit: 17, kana: "とうきょう", kanji: "東京", chinese: "東京" },
+
+        // Unit 18
+        { unit: 18, kana: "どうぞ", kanji: "どうぞ", chinese: "請~" },
+        { unit: 18, kana: "とうちゃくします", kanji: "到着します", chinese: "抵達" },
+        { unit: 18, kana: "どうぶつ", kanji: "動物", chinese: "動物" },
+        { unit: 18, kana: "どうぶつえん", kanji: "動物園", chinese: "動物園" },
+        { unit: 18, kana: "とおい", kanji: "遠い", chinese: "遠的" },
+        { unit: 18, kana: "とき", kanji: "時", chinese: "時候" },
+        { unit: 18, kana: "ときどき", kanji: "時々", chinese: "有時候" },
+        { unit: 18, kana: "とくいな", kanji: "得意な", chinese: "拿手的" },
+        { unit: 18, kana: "とけい", kanji: "時計", chinese: "鐘錶" },
+        { unit: 18, kana: "どこ", kanji: "どこ", chinese: "哪裡" },
+        { unit: 18, kana: "ところ", kanji: "ところ", chinese: "地方" },
+        { unit: 18, kana: "としょかん", kanji: "図書館", chinese: "圖書館" },
+        { unit: 18, kana: "どちら", kanji: "どちら", chinese: "哪個、哪裡、哪位" },
+        { unit: 18, kana: "どっち", kanji: "どっち", chinese: "哪一邊" },
+        { unit: 18, kana: "とても", kanji: "とても", chinese: "非常" },
+        { unit: 18, kana: "となり", kanji: "隣", chinese: "隔壁" },
+        { unit: 18, kana: "どの", kanji: "どの", chinese: "哪個+名詞" },
+        { unit: 18, kana: "とびます", kanji: "飛びます", chinese: "飛" },
+        { unit: 18, kana: "トマト", kanji: "Tomato", chinese: "番茄" },
+        { unit: 18, kana: "ともだち", kanji: "友達", chinese: "朋友" },
+        { unit: 18, kana: "とら", kanji: "虎", chinese: "老虎" },
+        { unit: 18, kana: "ドラマ", kanji: "Drama", chinese: "連續劇" },
+        { unit: 18, kana: "とりにく", kanji: "鶏肉", chinese: "雞肉" },
+        { unit: 18, kana: "とります", kanji: "取ります", chinese: "拿取" },
+        { unit: 18, kana: "とります", kanji: "撮ります", chinese: "拍照、攝影" },
+        { unit: 18, kana: "ドル", kanji: "Dollar", chinese: "美金" },
+        { unit: 18, kana: "どれ", kanji: "どれ", chinese: "哪個" },
+        { unit: 18, kana: "どんな", kanji: "どんな", chinese: "如何的、怎麼樣的" },
+        { unit: 18, kana: "ナイフ", kanji: "Knife", chinese: "刀子" },
+        { unit: 18, kana: "なか", kanji: "中", chinese: "裡面" },
+
+        // Unit 19
+        { unit: 19, kana: "ながい", kanji: "長い", chinese: "長的" },
+        { unit: 19, kana: "なくします", kanji: "無くします", chinese: "遺失、搞丟" },
+        { unit: 19, kana: "なつ", kanji: "夏", chinese: "夏天" },
+        { unit: 19, kana: "なっとう", kanji: "納豆", chinese: "納豆" },
+        { unit: 19, kana: "なつやすみ", kanji: "夏休み", chinese: "暑假" },
+        { unit: 19, kana: "なに/なん", kanji: "何", chinese: "什麼" },
+        { unit: 19, kana: "なまえ", kanji: "名前", chinese: "名字" },
+        { unit: 19, kana: "ならいます", kanji: "習います", chinese: "學習" },
+        { unit: 19, kana: "なりたこくさいくうこう", kanji: "成田国際空港", chinese: "成田國際機場" },
+        { unit: 19, kana: "なります", kanji: "なります", chinese: "成為、變成" },
+        { unit: 19, kana: "なんがつ", kanji: "何月", chinese: "幾月" },
+        { unit: 19, kana: "なんさい", kanji: "何歳", chinese: "幾歲" },
+        { unit: 19, kana: "なんじ", kanji: "何時", chinese: "幾點" },
+        { unit: 19, kana: "なんにち", kanji: "何日", chinese: "幾日" },
+        { unit: 19, kana: "なんぷん", kanji: "何分", chinese: "幾分" },
+        { unit: 19, kana: "なんようび", kanji: "何曜日", chinese: "星期幾" },
+        { unit: 19, kana: "にがてな", kanji: "苦手な", chinese: "不拿手的" },
+        { unit: 19, kana: "にぎやかな", kanji: "賑やかな", chinese: "熱鬧的" },
+        { unit: 19, kana: "にく", kanji: "肉", chinese: "肉" },
+        { unit: 19, kana: "にくや", kanji: "肉屋", chinese: "肉舖" },
+        { unit: 19, kana: "にし", kanji: "西", chinese: "西(邊、方)" },
+        { unit: 19, kana: "にっか", kanji: "日課", chinese: "例行公事" },
+        { unit: 19, kana: "にほん", kanji: "日本", chinese: "日本" },
+        { unit: 19, kana: "にほんご", kanji: "日本語", chinese: "日文" },
+        { unit: 19, kana: "にほんじん", kanji: "日本人", chinese: "日本人" },
+        { unit: 19, kana: "にほんせい", kanji: "日本製", chinese: "日本製" },
+        { unit: 19, kana: "にもつ", kanji: "荷物", chinese: "行李" },
+        { unit: 19, kana: "ニュース", kanji: "News", chinese: "電視新聞" },
+        { unit: 19, kana: "にゅうがくします", kanji: "入学します", chinese: "入學" },
+        { unit: 19, kana: "にわ", kanji: "庭", chinese: "庭園" },
+
+        // Unit 20
+        { unit: 20, kana: "ぬぎます", kanji: "脱ぎます", chinese: "脫" },
+        { unit: 20, kana: "ネクタイ", kanji: "Necktie", chinese: "領帶" },
+        { unit: 20, kana: "ねこ", kanji: "猫", chinese: "貓" },
+        { unit: 20, kana: "ねだん", kanji: "値段", chinese: "價錢" },
+        { unit: 20, kana: "ねます", kanji: "寝ます", chinese: "睡覺" },
+        { unit: 20, kana: "ノート", kanji: "Notebook", chinese: "筆記本" },
+        { unit: 20, kana: "ノートパソコン", kanji: "Laptop", chinese: "筆記型電腦" },
+        { unit: 20, kana: "のぼります", kanji: "登ります", chinese: "登上、爬上" },
+        { unit: 20, kana: "のみます", kanji: "飲みます", chinese: "喝" },
+        { unit: 20, kana: "のみもの", kanji: "飲み物", chinese: "飲料" },
+        { unit: 20, kana: "のります", kanji: "乗ります", chinese: "騎、搭乘" },
+        { unit: 20, kana: "のりもの", kanji: "乗り物", chinese: "搭乘物、交通工具" },
+        { unit: 20, kana: "は", kanji: "歯", chinese: "牙齒" },
+        { unit: 20, kana: "パーティー", kanji: "Party", chinese: "派對" },
+        { unit: 20, kana: "バイク", kanji: "Bike", chinese: "摩托車、機車" },
+        { unit: 20, kana: "はいざら", kanji: "灰皿", chinese: "菸灰缸" },
+        { unit: 20, kana: "はいります", kanji: "入ります", chinese: "進入" },
+        { unit: 20, kana: "はがき", kanji: "葉書", chinese: "明信片" },
+        { unit: 20, kana: "はこ", kanji: "箱", chinese: "箱子、盒子" },
+        { unit: 20, kana: "はし", kanji: "箸", chinese: "筷子" },
+        { unit: 20, kana: "はし", kanji: "橋", chinese: "橋" },
+        { unit: 20, kana: "はじまります", kanji: "始まります", chinese: "開始" },
+        { unit: 20, kana: "バス", kanji: "Bus", chinese: "公車、巴士" },
+        { unit: 20, kana: "バスケットボール", kanji: "Basketball", chinese: "籃球" },
+        { unit: 20, kana: "パスポート", kanji: "Passport", chinese: "護照" },
+        { unit: 20, kana: "バター", kanji: "Butter", chinese: "奶油" },
+        { unit: 20, kana: "はたらきます", kanji: "働きます", chinese: "工作、勞動" },
+        { unit: 20, kana: "はな", kanji: "花", chinese: "花" },
+        { unit: 20, kana: "はなし", kanji: "話", chinese: "話、故事" },
+        { unit: 20, kana: "はなします", kanji: "話します", chinese: "說話" },
+
+        // Unit 21
+        { unit: 21, kana: "バナナ", kanji: "Banana", chinese: "香蕉" },
+        { unit: 21, kana: "はなや", kanji: "花屋", chinese: "花店" },
+        { unit: 21, kana: "はは", kanji: "母", chinese: "母親(謙稱)" },
+        { unit: 21, kana: "はやい", kanji: "早い", chinese: "早的" },
+        { unit: 21, kana: "はやい", kanji: "速い", chinese: "快的" },
+        { unit: 21, kana: "ばら", kanji: "ばら", chinese: "玫瑰" },
+        { unit: 21, kana: "はる", kanji: "春", chinese: "春天" },
+        { unit: 21, kana: "はるやすみ", kanji: "春休み", chinese: "春假" },
+        { unit: 21, kana: "はれ", kanji: "晴れ", chinese: "晴天" },
+        { unit: 21, kana: "ばん", kanji: "晩", chinese: "晚上" },
+        { unit: 21, kana: "パン", kanji: "Bread", chinese: "麵包" },
+        { unit: 21, kana: "ハンカチ", kanji: "Handkerchief", chinese: "手帕" },
+        { unit: 21, kana: "ばんごはん", kanji: "晩ご飯", chinese: "晚餐" },
+        { unit: 21, kana: "はんぶん", kanji: "半分", chinese: "一半" },
+        { unit: 21, kana: "ビール", kanji: "Beer", chinese: "啤酒" },
+        { unit: 21, kana: "ピアノ", kanji: "Piano", chinese: "鋼琴" },
+        { unit: 21, kana: "ひがし", kanji: "東", chinese: "東(邊、方)" },
+        { unit: 21, kana: "ひきだし", kanji: "引き出し", chinese: "抽屜" },
+        { unit: 21, kana: "ひきます", kanji: "弾きます", chinese: "彈奏、演奏弦樂器" },
+        { unit: 21, kana: "ひきます", kanji: "引きます", chinese: "罹患(感冒)、拉" },
+        { unit: 21, kana: "ひくい", kanji: "低い", chinese: "低的" },
+        { unit: 21, kana: "ひこうき", kanji: "飛行機", chinese: "飛機" },
+        { unit: 21, kana: "ひだり", kanji: "左", chinese: "左邊" },
+        { unit: 21, kana: "ひっこします", kanji: "引っ越します", chinese: "搬家" },
+        { unit: 21, kana: "ひと", kanji: "人", chinese: "人" },
+        { unit: 21, kana: "ひとりぐらし", kanji: "一人暮らし", chinese: "獨居、一人生活" },
+        { unit: 21, kana: "ひまな", kanji: "暇な", chinese: "空閒的" },
+        { unit: 21, kana: "びょういん", kanji: "病院", chinese: "醫院" },
+        { unit: 21, kana: "びょうき", kanji: "病気", chinese: "病、生病" },
+        { unit: 21, kana: "ひらがな", kanji: "平仮名", chinese: "平假名" },
+
+        // Unit 22
+        { unit: 22, kana: "ひる", kanji: "昼", chinese: "中午" },
+        { unit: 22, kana: "ひるごはん", kanji: "昼ご飯", chinese: "午餐" },
+        { unit: 22, kana: "ひろい", kanji: "広い", chinese: "廣闊的" },
+        { unit: 22, kana: "プール", kanji: "Pool", chinese: "游泳池" },
+        { unit: 22, kana: "フィリピン", kanji: "Philippines", chinese: "菲律賓" },
+        { unit: 22, kana: "ふうとう", kanji: "封筒", chinese: "信封" },
+        { unit: 22, kana: "フォーク", kanji: "Fork", chinese: "叉子" },
+        { unit: 22, kana: "ふかい", kanji: "深い", chinese: "深的" },
+        { unit: 22, kana: "ふく", kanji: "服", chinese: "衣服" },
+        { unit: 22, kana: "ブスな", kanji: "ブスな", chinese: "醜的" },
+        { unit: 22, kana: "ぶたにく", kanji: "豚肉", chinese: "豬肉" },
+        { unit: 22, kana: "ふとい", kanji: "太い", chinese: "粗的" },
+        { unit: 22, kana: "ふね", kanji: "船", chinese: "船" },
+        { unit: 22, kana: "ふべんな", kanji: "不便な", chinese: "不方便的" },
+        { unit: 22, kana: "ふゆ", kanji: "冬", chinese: "冬天" },
+        { unit: 22, kana: "プリント", kanji: "Print", chinese: "講義、參考資料" },
+        { unit: 22, kana: "ふるい", kanji: "古い", chinese: "古老的、舊的" },
+        { unit: 22, kana: "ふるさと", kanji: "故郷", chinese: "故鄉" },
+        { unit: 22, kana: "プレゼント", kanji: "Present", chinese: "禮物" },
+        { unit: 22, kana: "ぶんべつします", kanji: "分別します", chinese: "分類" },
+        { unit: 22, kana: "へたな", kanji: "下手な", chinese: "(做得)不好的、爛的" },
+        { unit: 22, kana: "ベッド", kanji: "Bed", chinese: "床" },
+        { unit: 22, kana: "ペット", kanji: "Pet", chinese: "寵物" },
+        { unit: 22, kana: "へや", kanji: "部屋", chinese: "房間" },
+        { unit: 22, kana: "ベランダ", kanji: "Veranda", chinese: "陽台" },
+        { unit: 22, kana: "ペン", kanji: "Pen", chinese: "筆" },
+        { unit: 22, kana: "べんきょうします", kanji: "勉強します", chinese: "讀書、念書" },
+        { unit: 22, kana: "ペンギン", kanji: "Penguin", chinese: "企鵝" },
+        { unit: 22, kana: "べんりな", kanji: "便利な", chinese: "方便的" },
+        { unit: 22, kana: "ホーム", kanji: "Platform", chinese: "月台" },
+
+        // Unit 23
+        { unit: 23, kana: "ボールペン", kanji: "Ballpoint pen", chinese: "原子筆" },
+        { unit: 23, kana: "ぼうし", kanji: "帽子", chinese: "帽子" },
+        { unit: 23, kana: "ポケット", kanji: "Pocket", chinese: "口袋" },
+        { unit: 23, kana: "ほしい", kanji: "欲しい", chinese: "想要的" },
+        { unit: 23, kana: "ポスト", kanji: "Post", chinese: "信箱" },
+        { unit: 23, kana: "ほそい", kanji: "細い", chinese: "細的" },
+        { unit: 23, kana: "ボタン", kanji: "Button", chinese: "鈕扣、按鈕" },
+        { unit: 23, kana: "ほっかいどう", kanji: "北海道", chinese: "北海道" },
+        { unit: 23, kana: "ポテト", kanji: "Potato", chinese: "薯條" },
+        { unit: 23, kana: "ホテル", kanji: "Hotel", chinese: "飯店" },
+        { unit: 23, kana: "ほん", kanji: "本", chinese: "書" },
+        { unit: 23, kana: "ほんだな", kanji: "本棚", chinese: "書櫃" },
+        { unit: 23, kana: "ほんや", kanji: "本屋", chinese: "書店" },
+        { unit: 23, kana: "まいあさ", kanji: "毎朝", chinese: "每天早上" },
+        { unit: 23, kana: "まいしゅう", kanji: "毎週", chinese: "每週" },
+        { unit: 23, kana: "まいつき", kanji: "毎月", chinese: "每個月" },
+        { unit: 23, kana: "まいとし", kanji: "毎年", chinese: "每年" },
+        { unit: 23, kana: "まいにち", kanji: "毎日", chinese: "每天" },
+        { unit: 23, kana: "まいばん", kanji: "毎晩", chinese: "每天晚上" },
+        { unit: 23, kana: "まえ", kanji: "前", chinese: "前面" },
+        { unit: 23, kana: "まがります", kanji: "曲がります", chinese: "轉彎、彎曲" },
+        { unit: 23, kana: "マクドナルド", kanji: "McDonald's", chinese: "麥當勞" },
+        { unit: 23, kana: "まずい", kanji: "まずい", chinese: "難吃的、難喝的" },
+        { unit: 23, kana: "まだ", kanji: "まだ", chinese: "還~" },
+        { unit: 23, kana: "まち", kanji: "町", chinese: "都市、城鎮" },
+        { unit: 23, kana: "まちます", kanji: "待ちます", chinese: "等、等待" },
+        { unit: 23, kana: "まっすぐな", kanji: "まっすぐな", chinese: "直的、筆直的" },
+        { unit: 23, kana: "まど", kanji: "窓", chinese: "窗戶" },
+        { unit: 23, kana: "まるい", kanji: "丸い", chinese: "圓的、圓滑的" },
+        { unit: 23, kana: "まんねんひつ", kanji: "万年筆", chinese: "鋼筆" },
+
+        // Unit 24
+        { unit: 24, kana: "みがきます", kanji: "磨きます", chinese: "刷(牙)、擦亮" },
+        { unit: 24, kana: "みかん", kanji: "みかん", chinese: "蜜柑、橘子" },
+        { unit: 24, kana: "みぎ", kanji: "右", chinese: "右邊" },
+        { unit: 24, kana: "みじかい", kanji: "短い", chinese: "短的" },
+        { unit: 24, kana: "みず", kanji: "水", chinese: "水" },
+        { unit: 24, kana: "みせ", kanji: "店", chinese: "店" },
+        { unit: 24, kana: "みせます", kanji: "見せます", chinese: "給~看" },
+        { unit: 24, kana: "みち", kanji: "道", chinese: "道路" },
+        { unit: 24, kana: "みどり", kanji: "緑", chinese: "綠色" },
+        { unit: 24, kana: "みなみ", kanji: "南", chinese: "南(邊、方)" },
+        { unit: 24, kana: "みます", kanji: "見ます", chinese: "看" },
+        { unit: 24, kana: "みみ", kanji: "耳", chinese: "耳朵" },
+        { unit: 24, kana: "ミルク", kanji: "Milk", chinese: "牛奶、奶精" },
+        { unit: 24, kana: "みんな/みな", kanji: "みんな", chinese: "大家、各位" },
+        { unit: 24, kana: "むこう", kanji: "向こう", chinese: "那一邊、那一頭" },
+        { unit: 24, kana: "むずかしい", kanji: "難しい", chinese: "困難的" },
+        { unit: 24, kana: "むすこ", kanji: "息子", chinese: "兒子(謙稱)" },
+        { unit: 24, kana: "むすこさん", kanji: "息子さん", chinese: "兒子(尊稱)" },
+        { unit: 24, kana: "むすめ", kanji: "娘", chinese: "女兒(謙稱)" },
+        { unit: 24, kana: "め", kanji: "目", chinese: "眼睛" },
+        { unit: 24, kana: "めがね", kanji: "眼鏡", chinese: "眼鏡" },
+        { unit: 24, kana: "もう", kanji: "もう", chinese: "已經" },
+        { unit: 24, kana: "もういちど", kanji: "もう一度", chinese: "在一次" },
+        { unit: 24, kana: "もし", kanji: "もし", chinese: "如果、假設" },
+        { unit: 24, kana: "もちます", kanji: "持ちます", chinese: "拿、持有" },
+        { unit: 24, kana: "もっと", kanji: "もっと", chinese: "更加" },
+        { unit: 24, kana: "もの", kanji: "もの", chinese: "東西、物品" },
+        { unit: 24, kana: "もらいます", kanji: "もらいます", chinese: "收到、得到" },
+        { unit: 24, kana: "もり", kanji: "森", chinese: "森林" },
+        { unit: 24, kana: "やおや", kanji: "八百屋", chinese: "蔬果店" },
+
+        // Unit 25
+        { unit: 25, kana: "やきゅう", kanji: "野球", chinese: "棒球" },
+        { unit: 25, kana: "やさい", kanji: "野菜", chinese: "蔬菜" },
+        { unit: 25, kana: "やすい", kanji: "安い", chinese: "便宜的" },
+        { unit: 25, kana: "やすみ", kanji: "休み", chinese: "假日" },
+        { unit: 25, kana: "やすみます", kanji: "休みます", chinese: "請假、休息" },
+        { unit: 25, kana: "やっきょく", kanji: "薬局", chinese: "藥局" },
+        { unit: 25, kana: "やま", kanji: "山", chinese: "山" },
+        { unit: 25, kana: "やめます", kanji: "やめます", chinese: "停止、戒" },
+        { unit: 25, kana: "ゆうがた", kanji: "夕方", chinese: "傍晚" },
+        { unit: 25, kana: "ゆうはん", kanji: "夕飯", chinese: "晚餐" },
+        { unit: 25, kana: "ゆうびんきょく", kanji: "郵便局", chinese: "郵局" },
+        { unit: 25, kana: "ゆうべ", kanji: "ゆうべ", chinese: "昨夜" },
+        { unit: 25, kana: "ゆうめいな", kanji: "有名な", chinese: "有名的" },
+        { unit: 25, kana: "ゆき", kanji: "雪", chinese: "雪、下雪天" },
+        { unit: 25, kana: "よいち", kanji: "夜市", chinese: "夜市" },
+        { unit: 25, kana: "ようちえん", kanji: "幼稚園", chinese: "幼稚園" },
+        { unit: 25, kana: "ようふく", kanji: "洋服", chinese: "衣服" },
+        { unit: 25, kana: "よく", kanji: "よく", chinese: "十分清楚的" },
+        { unit: 25, kana: "よこ", kanji: "横", chinese: "兩旁" },
+        { unit: 25, kana: "よこはま", kanji: "横浜", chinese: "橫濱" },
+        { unit: 25, kana: "よびます", kanji: "呼びます", chinese: "呼叫" },
+        { unit: 25, kana: "よみます", kanji: "読みます", chinese: "閱讀、朗讀、唸" },
+        { unit: 25, kana: "よる", kanji: "夜", chinese: "夜間、晚上" },
+        { unit: 25, kana: "よわい", kanji: "弱い", chinese: "弱的" },
+        { unit: 25, kana: "ラーメン", kanji: "Ramen", chinese: "拉麵" },
+        { unit: 25, kana: "らいげつ", kanji: "来月", chinese: "下個月" },
+        { unit: 25, kana: "らいしゅう", kanji: "来週", chinese: "下週" },
+        { unit: 25, kana: "ライター", kanji: "Lighter", chinese: "打火機" },
+        { unit: 25, kana: "らいねん", kanji: "来年", chinese: "明年" },
+        { unit: 25, kana: "ラジオ", kanji: "Radio", chinese: "收音機" },
+        { unit: 25, kana: "ラジカセ", kanji: "Radio-cassette", chinese: "手提音響" },
+        { unit: 25, kana: "リーダー", kanji: "Leader", chinese: "領導者" },
+        { unit: 25, kana: "りゅうがくせい", kanji: "留学生", chinese: "留學生" },
+        { unit: 25, kana: "りょうしん", kanji: "両親", chinese: "雙親" },
+        { unit: 25, kana: "りょうり", kanji: "料理", chinese: "料理" },
+        { unit: 25, kana: "りょこう", kanji: "旅行", chinese: "旅行" },
+        { unit: 25, kana: "りょこうします", kanji: "旅行します", chinese: "(去)旅行" },
+        { unit: 25, kana: "りんご", kanji: "りんご", chinese: "蘋果" },
+        { unit: 25, kana: "れいぞうこ", kanji: "冷蔵庫", chinese: "冰箱" },
+        { unit: 25, kana: "レストラン", kanji: "Restaurant", chinese: "餐廳" },
+        { unit: 25, kana: "レポート", kanji: "Report", chinese: "報告" },
+        { unit: 25, kana: "れんしゅう", kanji: "練習", chinese: "練習" },
+        { unit: 25, kana: "れんしゅうします", kanji: "練習します", chinese: "(做)練習" },
+        { unit: 25, kana: "ろうか", kanji: "廊下", chinese: "走廊" },
+        { unit: 25, kana: "ワイン", kanji: "Wine", chinese: "葡萄酒" },
+        { unit: 25, kana: "わかい", kanji: "若い", chinese: "年輕的" },
+        { unit: 25, kana: "わかります", kanji: "分かります", chinese: "知道、了解" },
+        { unit: 25, kana: "わすれます", kanji: "忘れます", chinese: "忘記、遺忘" },
+        { unit: 25, kana: "わたし", kanji: "私", chinese: "我" },
+        { unit: 25, kana: "わたしたち", kanji: "私たち", chinese: "我們" },
+        { unit: 25, kana: "わるい", kanji: "悪い", chinese: "壞的、錯的" },
+    ];
+
+    let currentMode = '';
+    let filteredVocab = [];
+    let currentIndex = 0;
+    let wrongAnswers = [];
+    let hasGuessedWrong = false;
+
+    // 初始化 25 個單元選項
+    function initMenu() {
+        const container = document.getElementById('unit-container');
+        for (let i = 1; i <= 25; i++) {
+            const label = document.createElement('label');
+            label.className = 'unit-label';
+            label.innerHTML = `<input type="checkbox" value="${i}" onchange="this.parentElement.classList.toggle('selected')"> ${i}`;
+            container.appendChild(label);
+        }
+    }
+
+    // 啟動模式
+    function startMode(mode) {
+        const selectedCheckboxes = document.querySelectorAll('#unit-container input:checked');
+        if (selectedCheckboxes.length === 0) {
+            alert('請至少選擇一個單元！');
+            return;
+        }
+
+        const selectedUnits = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+        filteredVocab = vocabData.filter(v => selectedUnits.includes(v.unit));
+        
+        if (filteredVocab.length === 0) {
+            alert('所選單元尚無單字資料！請選擇有資料的單元 (1-16)。');
+            return;
+        }
+
+        currentMode = mode;
+        currentIndex = 0;
+        wrongAnswers = [];
+        
+        // 洗牌 (僅測驗模式)
+        if (mode !== 'flashcard') {
+            filteredVocab = filteredVocab.sort(() => Math.random() - 0.5);
+        }
+
+        document.getElementById('view-menu').classList.add('hidden');
+        document.getElementById('view-active').classList.remove('hidden');
+        document.getElementById('area-flashcard').classList.add('hidden');
+        document.getElementById('area-quiz').classList.add('hidden');
+
+        if (mode === 'flashcard') {
+            document.getElementById('area-flashcard').classList.remove('hidden');
+            renderFlashcard();
+        } else {
+            document.getElementById('area-quiz').classList.remove('hidden');
+            renderQuiz();
+        }
+    }
+
+    // 更新顯示語言 (漢字/假名)
+    function updateDisplay() {
+        if (currentMode === 'flashcard') renderFlashcard();
+        else renderQuiz();
+    }
+
+    // 渲染單字卡
+    function renderFlashcard() {
+        document.querySelector('.flashcard').classList.remove('flipped');
+        const vocab = filteredVocab[currentIndex];
+        const displayType = document.getElementById('display-type').value;
+        
+        document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${filteredVocab.length}`;
+        document.getElementById('fc-front').innerText = vocab.chinese;
+        document.getElementById('fc-back').innerText = displayType === 'kanji' ? vocab.kanji : vocab.kana;
+    }
+
+    function nextCard() {
+        if (currentIndex < filteredVocab.length - 1) {
+            currentIndex++;
+            renderFlashcard();
+        } else {
+            alert('這已經是最後一張了！');
+        }
+    }
+
+    function prevCard() {
+        if (currentIndex > 0) {
+            currentIndex--;
+            renderFlashcard();
+        }
+    }
+
+    // 渲染測驗
+    function renderQuiz() {
+        hasGuessedWrong = false;
+        document.getElementById('btn-next-quiz').classList.add('hidden');
+        const vocab = filteredVocab[currentIndex];
+        const displayType = document.getElementById('display-type').value;
+        document.getElementById('progress-text').innerText = `${currentIndex + 1} / ${filteredVocab.length}`;
+        
+        let questionText, correctText;
+        if (currentMode === 'zh-jp') {
+            questionText = vocab.chinese;
+            correctText = displayType === 'kanji' ? vocab.kanji : vocab.kana;
+        } else {
+            questionText = displayType === 'kanji' ? vocab.kanji : vocab.kana;
+            correctText = vocab.chinese;
+        }
+
+        document.getElementById('quiz-question').innerText = questionText;
+        
+        // 產生選項
+        let options = [vocab];
+        while (options.length < 4) {
+            let rand = vocabData[Math.floor(Math.random() * vocabData.length)];
+            if (!options.includes(rand)) {
+                options.push(rand);
+            }
+        }
+        options.sort(() => Math.random() - 0.5);
+
+        const optionsContainer = document.getElementById('quiz-options');
+        optionsContainer.innerHTML = '';
+        
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            
+            let optText;
+            if (currentMode === 'zh-jp') {
+                optText = displayType === 'kanji' ? opt.kanji : opt.kana;
+            } else {
+                optText = opt.chinese;
+            }
+            
+            btn.innerText = optText;
+            btn.onclick = () => handleGuess(btn, opt === vocab, vocab);
+            optionsContainer.appendChild(btn);
+        });
+    }
+
+    function handleGuess(btn, isCorrect, vocab) {
+        if (isCorrect) {
+            btn.classList.add('correct');
+            document.getElementById('btn-next-quiz').classList.remove('hidden');
+            // 停用所有按鈕
+            document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+            
+            if (hasGuessedWrong && !wrongAnswers.includes(vocab)) {
+                wrongAnswers.push(vocab);
+            }
+        } else {
+            btn.classList.add('wrong');
+            btn.disabled = true;
+            hasGuessedWrong = true;
+        }
+    }
+
+    function nextQuiz() {
+        if (currentIndex < filteredVocab.length - 1) {
+            currentIndex++;
+            renderQuiz();
+        } else {
+            showResults();
+        }
+    }
+
+    // 顯示結果
+    function showResults() {
+        document.getElementById('view-active').classList.add('hidden');
+        document.getElementById('view-results').classList.remove('hidden');
+        
+        const score = filteredVocab.length - wrongAnswers.length;
+        document.getElementById('result-score').innerText = `答對：${score} / ${filteredVocab.length}`;
+        
+        const wrongList = document.getElementById('wrong-list');
+        wrongList.innerHTML = '';
+        
+        if (wrongAnswers.length === 0) {
+            wrongList.innerHTML = '<li>太棒了！全對！</li>';
+        } else {
+            wrongAnswers.forEach(v => {
+                const li = document.createElement('li');
+                li.innerText = `${v.chinese} — ${v.kanji} (${v.kana})`;
+                wrongList.appendChild(li);
+            });
+        }
+    }
+
+    // 返回首頁
+    function returnToMenu() {
+        document.getElementById('view-active').classList.add('hidden');
+        document.getElementById('view-results').classList.add('hidden');
+        document.getElementById('view-menu').classList.remove('hidden');
+    }
+
+    // 啟動初始化
+    initMenu();
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then((reg) => console.log('Service Worker 註冊成功', reg))
+        .catch((err) => console.error('Service Worker 註冊失敗', err));
+    });
+  }
+</script>
+
+</body>
+</html>
